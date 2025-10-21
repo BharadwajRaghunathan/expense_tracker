@@ -3,11 +3,13 @@ Flask Application Factory
 Creates and configures the Flask application with all extensions and blueprints
 """
 
+
 from flask import Flask, jsonify
 from flask_cors import CORS
 from config import Config
 from app.extensions import db, migrate, jwt
 from app.models import User, Category, PaymentMode, Expense
+
 
 def create_app(config_class=Config):
     """
@@ -34,11 +36,15 @@ def create_app(config_class=Config):
     # ✅ FIXED: Initialize JWT FIRST with proper config
     jwt.init_app(app)
     
-    # ✅ FIXED: Configure CORS with proper OPTIONS support
+    # ✅ FIXED: Configure CORS with proper OPTIONS support AND production frontend URL
     CORS(app, 
          resources={
              r"/api/*": {
-                 "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+                 "origins": [
+                     "http://localhost:3000", 
+                     "http://127.0.0.1:3000",
+                     "https://expense-tracker-frontend-m3ud.onrender.com"
+                 ],
                  "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                  "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-TOKEN"],
                  "expose_headers": ["Content-Type", "Authorization"],
@@ -85,7 +91,7 @@ def create_app(config_class=Config):
     print('  • /api/ai - AI Insights')
     print('  • /api/export - Export Reports')
     
-    # ✅ FIXED: Add global OPTIONS handler for all API routes
+    # ✅ FIXED: Add global OPTIONS handler for all API routes with production frontend URL
     @app.before_request
     def handle_preflight():
         from flask import request
@@ -93,7 +99,14 @@ def create_app(config_class=Config):
             # Allow all OPTIONS requests
             from flask import make_response
             response = make_response()
-            response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
+            origin = request.headers.get('Origin')
+            allowed_origins = [
+                "http://localhost:3000",
+                "http://127.0.0.1:3000",
+                "https://expense-tracker-frontend-m3ud.onrender.com"
+            ]
+            if origin in allowed_origins:
+                response.headers.add("Access-Control-Allow-Origin", origin)
             response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-Requested-With")
             response.headers.add('Access-Control-Allow-Methods', "GET,PUT,POST,DELETE,OPTIONS,PATCH")
             response.headers.add('Access-Control-Allow-Credentials', 'true')
@@ -149,6 +162,7 @@ def create_app(config_class=Config):
     
     return app
 
+
 def register_error_handlers(app):
     """Register custom error handlers"""
     
@@ -196,6 +210,7 @@ def register_error_handlers(app):
             "error": "Internal Server Error",
             "message": "An internal server error occurred. Please try again later."
         }), 500
+
 
 def register_jwt_callbacks(jwt, app):
     """Register JWT callbacks with detailed logging"""
@@ -251,6 +266,7 @@ def register_jwt_callbacks(jwt, app):
         user = User.query.filter_by(id=identity).one_or_none()
         print(f'🔍 JWT: Looking up user with ID {identity} - Found: {user is not None}')
         return user
+
 
 def register_cli_commands(app):
     """Register CLI commands"""

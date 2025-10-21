@@ -3,13 +3,16 @@ WSGI Entry Point for Production Deployment
 Used by production WSGI servers (Gunicorn, Render)
 """
 
+
 import os
 from app import create_app
 from config import config
 
 
+
 # Determine environment
 environment = os.environ.get('FLASK_ENV', 'production')
+
 
 # For Render deployment - always use production config
 if os.environ.get('RENDER') or environment == 'production':
@@ -17,8 +20,10 @@ if os.environ.get('RENDER') or environment == 'production':
 else:
     config_class = config.get(environment, config['production'])
 
+
 # Create application instance
 app = create_app(config_class)
+
 
 
 # Application initialization logging
@@ -32,6 +37,7 @@ if __name__ != '__main__':
     print(f'✓ OpenAI: {"Configured" if app.config.get("OPENAI_API_KEY") else "Not Configured"}')
     print(f'✓ CORS: Enabled')
     print('=' * 60)
+
 
 
 if __name__ == '__main__':
