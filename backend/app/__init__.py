@@ -156,6 +156,67 @@ def create_app(config_class=Config):
             "environment": app.config.get('FLASK_ENV', 'unknown')
         }), 200
     
+    # ✅ NEW: Auto-seed database in production if empty
+    with app.app_context():
+        try:
+            # Check if categories exist
+            if Category.query.count() == 0:
+                print('=' * 60)
+                print('🌱 Database empty, auto-seeding categories...')
+                categories = [
+                    {"name": "Food", "slug": "food", "color": "#FF6B6B"},
+                    {"name": "Transportation", "slug": "transportation", "color": "#4ECDC4"},
+                    {"name": "Shopping", "slug": "shopping", "color": "#45B7D1"},
+                    {"name": "Entertainment", "slug": "entertainment", "color": "#FFA07A"},
+                    {"name": "Bills & Utilities", "slug": "bills-utilities", "color": "#98D8C8"},
+                    {"name": "Healthcare", "slug": "healthcare", "color": "#FF69B4"},
+                    {"name": "Education", "slug": "education", "color": "#9B59B6"},
+                    {"name": "Travel", "slug": "travel", "color": "#3498DB"},
+                    {"name": "Investments", "slug": "investments", "color": "#2ECC71"},
+                    {"name": "Others", "slug": "others", "color": "#95A5A6"},
+                ]
+                for cat_data in categories:
+                    category = Category(**cat_data)
+                    db.session.add(category)
+                    print(f'  ✓ Added category: {cat_data["name"]}')
+                db.session.commit()
+                print('✅ Categories seeded successfully')
+                print('=' * 60)
+            
+            # Check if payment modes exist
+            if PaymentMode.query.count() == 0:
+                print('=' * 60)
+                print('🌱 Database empty, auto-seeding payment modes...')
+                payment_modes = [
+                    {"name": "GPay", "bankname": "SBI", "type": "digital"},
+                    {"name": "GPay", "bankname": "HDFC", "type": "digital"},
+                    {"name": "GPay", "bankname": "IOB", "type": "digital"},
+                    {"name": "PhonePe", "bankname": "SBI", "type": "digital"},
+                    {"name": "PhonePe", "bankname": "HDFC", "type": "digital"},
+                    {"name": "Paytm", "bankname": None, "type": "digital"},
+                    {"name": "Cash", "bankname": None, "type": "cash"},
+                    {"name": "Credit Card", "bankname": None, "type": "card"},
+                    {"name": "Debit Card", "bankname": None, "type": "card"},
+                    {"name": "Net Banking", "bankname": None, "type": "digital"},
+                    {"name": "UPI", "bankname": None, "type": "digital"},
+                    {"name": "Other", "bankname": None, "type": "other"},
+                ]
+                for pm_data in payment_modes:
+                    payment_mode = PaymentMode(**pm_data)
+                    db.session.add(payment_mode)
+                    display = f"{pm_data['name']}"
+                    if pm_data.get('bankname'):
+                        display += f" - {pm_data['bankname']}"
+                    print(f'  ✓ Added payment mode: {display}')
+                db.session.commit()
+                print('✅ Payment modes seeded successfully')
+                print('=' * 60)
+        except Exception as e:
+            db.session.rollback()
+            print(f'⚠️  Auto-seed warning: {str(e)}')
+            import traceback
+            traceback.print_exc()
+    
     print('=' * 60)
     print('✓ Flask application initialized successfully')
     print('=' * 60)
@@ -309,19 +370,19 @@ def register_cli_commands(app):
                 {"name": "GPay", "bankname": "IOB", "type": "digital"},
                 {"name": "PhonePe", "bankname": "SBI", "type": "digital"},
                 {"name": "PhonePe", "bankname": "HDFC", "type": "digital"},
-                {"name": "Paytm", "type": "digital"},
-                {"name": "Cash", "type": "cash"},
-                {"name": "Credit Card", "type": "card"},
-                {"name": "Debit Card", "type": "card"},
-                {"name": "Net Banking", "type": "digital"},
-                {"name": "UPI", "type": "digital"},
-                {"name": "Other", "type": "other"},
+                {"name": "Paytm", "bankname": None, "type": "digital"},
+                {"name": "Cash", "bankname": None, "type": "cash"},
+                {"name": "Credit Card", "bankname": None, "type": "card"},
+                {"name": "Debit Card", "bankname": None, "type": "card"},
+                {"name": "Net Banking", "bankname": None, "type": "digital"},
+                {"name": "UPI", "bankname": None, "type": "digital"},
+                {"name": "Other", "bankname": None, "type": "other"},
             ]
             
             for pm_data in payment_modes:
                 existing = PaymentMode.query.filter_by(
                     name=pm_data['name'],
-                    bankname=pm_data.get('bankname')
+                    bank_name=pm_data.get('bankname')
                 ).first()
                 if not existing:
                     payment_mode = PaymentMode(**pm_data)
