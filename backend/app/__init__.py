@@ -3,11 +3,13 @@ Flask Application Factory
 Creates and configures the Flask application with all extensions and blueprints
 """
 
-from flask import Flask, jsonify
+import os
+from flask import Flask, jsonify, request, make_response
 from flask_cors import CORS
 from config import Config
 from app.extensions import db, migrate, jwt
 from app.models import User, Category, PaymentMode, Expense
+
 
 def create_app(config_class=Config):
     """
@@ -31,14 +33,25 @@ def create_app(config_class=Config):
     print('🚀 Initializing Flask Application')
     print('=' * 60)
     
+    # ✅ FIXED: Get allowed origins from environment
+    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3000')
+    
+    # Support multiple origins (comma-separated)
+    if ',' in frontend_url:
+        allowed_origins = [origin.strip() for origin in frontend_url.split(',')]
+    else:
+        allowed_origins = [frontend_url, 'http://localhost:3000', 'http://127.0.0.1:3000']
+    
+    print(f'✓ CORS allowed origins: {allowed_origins}')
+    
     # ✅ FIXED: Initialize JWT FIRST with proper config
     jwt.init_app(app)
     
-    # ✅ FIXED: Configure CORS with proper OPTIONS support
+    # ✅ FIXED: Configure CORS with dynamic origins from environment
     CORS(app, 
          resources={
              r"/api/*": {
-                 "origins": ["http://localhost:3000", "http://127.0.0.1:3000"],
+                 "origins": allowed_origins,
                  "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                  "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-TOKEN"],
                  "expose_headers": ["Content-Type", "Authorization"],
@@ -55,18 +68,32 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     
-    # Create tables if they don't exist (development only)
+    # Create tables if they don't exist
     with app.app_context():
-        if app.config.get('FLASK_ENV') == 'development':
-            try:
-                db.create_all()
-                print('✓ Database tables created/verified')
-            except Exception as e:
-                print(f'⚠️  Database warning: {str(e)}')
+        try:
+            db.create_all()
+            print('✓ Database tables created/verified')
+        except Exception as e:
+            print(f'⚠️  Database warning: {str(e)}')
     
     # ✅ FIXED: Register JWT callbacks BEFORE blueprints
     register_jwt_callbacks(jwt, app)
     print('✓ JWT callbacks registered')
+    
+    # Configure OpenAI
+    openai_key = os.getenv('OPENAI_API_KEY')
+    if openai_key:
+        print(f'✅ OpenAI configured successfully with model: {os.getenv("OPENAI_MODEL", "gpt-4o-mini")}')
+    else:
+        print('⚠️  OpenAI API key not configured')
+    
+    # Check for fonts (for PDF generation)
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        print('⚠️ Using default fonts (₹ symbol may not display)')
+    except:
+        pass
     
     # Register blueprints
     from app.routes import auth_bp, expenses_bp, analytics_bp, ai_bp
@@ -85,15 +112,16 @@ def create_app(config_class=Config):
     print('  • /api/ai - AI Insights')
     print('  • /api/export - Export Reports')
     
-    # ✅ FIXED: Add global OPTIONS handler for all API routes
+    # ✅ FIXED: Add global OPTIONS handler with dynamic origins
     @app.before_request
     def handle_preflight():
-        from flask import request
         if request.method == "OPTIONS":
-            # Allow all OPTIONS requests
-            from flask import make_response
             response = make_response()
-            response.headers.add("Access-Control-Allow-Origin", "http://localhost:3000")
+            origin = request.headers.get('Origin')
+            if origin in allowed_origins:
+                response.headers.add("Access-Control-Allow-Origin", origin)
+            else:
+                response.headers.add("Access-Control-Allow-Origin", allowed_origins[0])
             response.headers.add('Access-Control-Allow-Headers', "Content-Type,Authorization,X-Requested-With")
             response.headers.add('Access-Control-Allow-Methods', "GET,PUT,POST,DELETE,OPTIONS,PATCH")
             response.headers.add('Access-Control-Allow-Credentials', 'true')
@@ -149,6 +177,7 @@ def create_app(config_class=Config):
     
     return app
 
+
 def register_error_handlers(app):
     """Register custom error handlers"""
     
@@ -197,6 +226,7 @@ def register_error_handlers(app):
             "message": "An internal server error occurred. Please try again later."
         }), 500
 
+
 def register_jwt_callbacks(jwt, app):
     """Register JWT callbacks with detailed logging"""
     
@@ -232,13 +262,12 @@ def register_jwt_callbacks(jwt, app):
             "message": "The token has been revoked. Please login again."
         }), 401
     
-    # ✅ FIXED: Add additional JWT callbacks for better debugging
     @jwt.additional_claims_loader
     def add_claims_to_jwt(identity):
         user = User.query.get(identity)
         return {
             'email': user.email if user else None,
-            'is_admin': False  # Add admin check if needed
+            'is_admin': False
         }
     
     @jwt.user_identity_loader
@@ -249,121 +278,12 @@ def register_jwt_callbacks(jwt, app):
     def user_lookup_callback(_jwt_header, jwt_data):
         identity = jwt_data["sub"]
         user = User.query.filter_by(id=identity).one_or_none()
-        print(f'🔍 JWT: Looking up user with ID {identity} - Found: {user is not None}')
         return user
+
 
 def register_cli_commands(app):
     """Register CLI commands"""
+    from app.cli import seed_database, create_admin
     
-    @app.cli.command('seed-db')
-    def seed_database():
-        """Seed database with default categories and payment modes"""
-        print('=' * 60)
-        print('🌱 Seeding database with default data...')
-        print('=' * 60)
-        
-        try:
-            # Seed categories
-            categories = [
-                {"name": "Food", "slug": "food", "color": "#FF6B6B"},
-                {"name": "Transportation", "slug": "transportation", "color": "#4ECDC4"},
-                {"name": "Shopping", "slug": "shopping", "color": "#45B7D1"},
-                {"name": "Entertainment", "slug": "entertainment", "color": "#FFA07A"},
-                {"name": "Bills & Utilities", "slug": "bills-utilities", "color": "#98D8C8"},
-                {"name": "Healthcare", "slug": "healthcare", "color": "#FF69B4"},
-                {"name": "Education", "slug": "education", "color": "#9B59B6"},
-                {"name": "Travel", "slug": "travel", "color": "#3498DB"},
-                {"name": "Investments", "slug": "investments", "color": "#2ECC71"},
-                {"name": "Others", "slug": "others", "color": "#95A5A6"},
-            ]
-            
-            for cat_data in categories:
-                existing = Category.query.filter_by(slug=cat_data['slug']).first()
-                if not existing:
-                    category = Category(**cat_data)
-                    db.session.add(category)
-                    print(f'✓ Added category: {cat_data["name"]}')
-                else:
-                    print(f'⊙ Category already exists: {cat_data["name"]}')
-            
-            # Seed payment modes
-            payment_modes = [
-                {"name": "GPay", "bankname": "SBI", "type": "digital"},
-                {"name": "GPay", "bankname": "HDFC", "type": "digital"},
-                {"name": "GPay", "bankname": "IOB", "type": "digital"},
-                {"name": "PhonePe", "bankname": "SBI", "type": "digital"},
-                {"name": "PhonePe", "bankname": "HDFC", "type": "digital"},
-                {"name": "Paytm", "type": "digital"},
-                {"name": "Cash", "type": "cash"},
-                {"name": "Credit Card", "type": "card"},
-                {"name": "Debit Card", "type": "card"},
-                {"name": "Net Banking", "type": "digital"},
-                {"name": "UPI", "type": "digital"},
-                {"name": "Other", "type": "other"},
-            ]
-            
-            for pm_data in payment_modes:
-                existing = PaymentMode.query.filter_by(
-                    name=pm_data['name'],
-                    bankname=pm_data.get('bankname')
-                ).first()
-                if not existing:
-                    payment_mode = PaymentMode(**pm_data)
-                    db.session.add(payment_mode)
-                    display = f"{pm_data['name']}"
-                    if pm_data.get('bankname'):
-                        display += f" - {pm_data['bankname']}"
-                    print(f'✓ Added payment mode: {display}')
-                else:
-                    display = f"{pm_data['name']}"
-                    if pm_data.get('bankname'):
-                        display += f" - {pm_data['bankname']}"
-                    print(f'⊙ Payment mode already exists: {display}')
-            
-            db.session.commit()
-            print('=' * 60)
-            print('✅ Database seeded successfully!')
-            print('=' * 60)
-            
-        except Exception as e:
-            db.session.rollback()
-            print('=' * 60)
-            print(f'❌ Error seeding database: {str(e)}')
-            print('=' * 60)
-    
-    @app.cli.command('create-admin')
-    def create_admin():
-        """Create admin user"""
-        from werkzeug.security import generate_password_hash
-        
-        print('=' * 60)
-        print('👤 Creating admin user...')
-        print('=' * 60)
-        
-        try:
-            admin_email = 'admin@example.com'
-            existing = User.query.filter_by(email=admin_email).first()
-            
-            if existing:
-                print(f'⊙ Admin user already exists: {admin_email}')
-            else:
-                admin = User(
-                    email=admin_email,
-                    full_name='Admin User',
-                    password='admin123',  # Will be hashed by User model
-                    is_active=True
-                )
-                db.session.add(admin)
-                db.session.commit()
-                print(f'✓ Admin user created: {admin_email}')
-                print('  Password: admin123')
-            
-            print('=' * 60)
-            print('✅ Admin user ready!')
-            print('=' * 60)
-            
-        except Exception as e:
-            db.session.rollback()
-            print('=' * 60)
-            print(f'❌ Error creating admin: {str(e)}')
-            print('=' * 60)
+    app.cli.add_command(seed_database)
+    app.cli.add_command(create_admin)
