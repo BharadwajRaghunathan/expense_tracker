@@ -15,6 +15,8 @@ class PaymentMode(db.Model):
         id: Primary key
         name: Payment method name (e.g., GPay, Cash, Metro Card)
         bank_name: Optional bank name for digital payments (e.g., SBI, HDFC, IOB)
+        icon: Optional icon for UI
+        color: Optional color code for UI
         type: Payment type (digital, cash, card)
         is_active: Whether this payment mode is available
         created_at: Timestamp when payment mode was created
@@ -31,6 +33,10 @@ class PaymentMode(db.Model):
     # Payment Mode Information
     name = db.Column(db.String(50), nullable=False, index=True)
     bank_name = db.Column(db.String(50), nullable=True)  # For GPay - SBI, HDFC, IOB
+    
+    # UI Configuration (for frontend styling)
+    icon = db.Column(db.String(50), nullable=True)
+    color = db.Column(db.String(7), nullable=True)  # Hex color code
     
     # Payment Type Classification
     type = db.Column(
@@ -58,7 +64,7 @@ class PaymentMode(db.Model):
         db.UniqueConstraint('name', 'bank_name', name='unique_payment_mode'),
     )
     
-    def __init__(self, name, bank_name=None, type='digital'):
+    def __init__(self, name, bank_name=None, type='digital', icon=None, color=None, **kwargs):
         """
         Initialize a new payment mode
         
@@ -66,10 +72,16 @@ class PaymentMode(db.Model):
             name (str): Payment mode name
             bank_name (str, optional): Bank name for GPay payments
             type (str): Payment type classification
+            icon (str, optional): Icon for UI
+            color (str, optional): Color code for UI
+            **kwargs: Accept any extra arguments and ignore them
         """
         self.name = name
         self.bank_name = bank_name
         self.type = type
+        self.icon = icon
+        self.color = color
+        # Ignore any extra kwargs
     
     def to_dict(self):
         """
@@ -82,6 +94,8 @@ class PaymentMode(db.Model):
             'id': self.id,
             'name': self.name,
             'bank_name': self.bank_name,
+            'icon': self.icon,
+            'color': self.color,
             'type': self.type,
             'display_name': self.get_display_name(),
             'is_active': self.is_active,

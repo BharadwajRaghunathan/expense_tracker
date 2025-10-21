@@ -51,7 +51,7 @@ class Category(db.Model):
         cascade='all, delete-orphan'
     )
     
-    def __init__(self, name, description=None, icon=None, color=None):
+    def __init__(self, name, description=None, icon=None, color=None, **kwargs):
         """
         Initialize a new category
         
@@ -60,11 +60,13 @@ class Category(db.Model):
             description (str, optional): Category description
             icon (str, optional): Icon identifier
             color (str, optional): Hex color code
+            **kwargs: Accept any extra arguments and ignore them
         """
         self.name = name
         self.description = description
         self.icon = icon
         self.color = color
+        # Ignore any extra kwargs to prevent errors
     
     def to_dict(self):
         """
