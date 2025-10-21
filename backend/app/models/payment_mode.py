@@ -3,6 +3,7 @@ PaymentMode Model - Manages payment methods
 Includes GPay (with bank options), Cash, Metro Card, etc.
 """
 
+
 from app.extensions import db
 from datetime import datetime, timezone
 
@@ -64,20 +65,20 @@ class PaymentMode(db.Model):
         db.UniqueConstraint('name', 'bank_name', name='unique_payment_mode'),
     )
     
-    def __init__(self, name, bank_name=None, type='digital', icon=None, color=None, **kwargs):
+    def __init__(self, name, bankname=None, type='digital', icon=None, color=None, **kwargs):
         """
         Initialize a new payment mode
         
         Args:
             name (str): Payment mode name
-            bank_name (str, optional): Bank name for GPay payments
+            bankname (str, optional): Bank name for GPay payments (maps to bank_name)
             type (str): Payment type classification
             icon (str, optional): Icon for UI
             color (str, optional): Color code for UI
             **kwargs: Accept any extra arguments and ignore them
         """
         self.name = name
-        self.bank_name = bank_name
+        self.bank_name = bankname  # Map 'bankname' parameter to 'bank_name' attribute
         self.type = type
         self.icon = icon
         self.color = color
@@ -123,16 +124,16 @@ class PaymentMode(db.Model):
         """
         return [
             # GPay with different banks
-            {'name': 'GPay', 'bank_name': 'SBI', 'type': 'digital'},
-            {'name': 'GPay', 'bank_name': 'HDFC', 'type': 'digital'},
-            {'name': 'GPay', 'bank_name': 'IOB', 'type': 'digital'},
+            {'name': 'GPay', 'bankname': 'SBI', 'type': 'digital'},
+            {'name': 'GPay', 'bankname': 'HDFC', 'type': 'digital'},
+            {'name': 'GPay', 'bankname': 'IOB', 'type': 'digital'},
             
             # Other payment methods
-            {'name': 'Cash', 'bank_name': None, 'type': 'cash'},
-            {'name': 'Metro Card', 'bank_name': None, 'type': 'card'},
-            {'name': 'Credit Card', 'bank_name': None, 'type': 'card'},
-            {'name': 'Debit Card', 'bank_name': None, 'type': 'card'},
-            {'name': 'Other', 'bank_name': None, 'type': 'other'}
+            {'name': 'Cash', 'bankname': None, 'type': 'cash'},
+            {'name': 'Metro Card', 'bankname': None, 'type': 'card'},
+            {'name': 'Credit Card', 'bankname': None, 'type': 'card'},
+            {'name': 'Debit Card', 'bankname': None, 'type': 'card'},
+            {'name': 'Other', 'bankname': None, 'type': 'other'}
         ]
     
     def __repr__(self):
