@@ -3,6 +3,7 @@
  * User login page with email and password authentication
  */
 
+
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
@@ -10,17 +11,22 @@ import { MdEmail, MdLock, MdVisibility, MdVisibilityOff } from 'react-icons/md';
 import { authAPI } from '../../services/api';
 import { setAuthToken, setUserData } from '../../utils/auth';
 
+
 const Login = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isServerWaking, setIsServerWaking] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
   });
 
+
   const from = location.state?.from?.pathname || '/dashboard';
+
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -30,25 +36,32 @@ const Login = () => {
     }));
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+
+  const handleSubmit = async (e, isRetry = false) => {
+    if (e) e.preventDefault();
     
     console.log('🔐 === LOGIN PROCESS START ===');
     console.log('1. Form submitted');
     console.log('   Email:', formData.email);
 
-    // Validation
-    if (!formData.email || !formData.password) {
-      toast.error('Please fill in all fields');
-      return;
+
+    // Validation (skip on retry)
+    if (!isRetry) {
+      if (!formData.email || !formData.password) {
+        toast.error('Please fill in all fields');
+        return;
+      }
+
+
+      if (!/\S+@\S+\.\S+/.test(formData.email)) {
+        toast.error('Please enter a valid email');
+        return;
+      }
     }
 
-    if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      toast.error('Please enter a valid email');
-      return;
-    }
 
     setLoading(true);
+
 
     try {
       console.log('2. Calling login API...');
@@ -58,14 +71,18 @@ const Login = () => {
         password: formData.password,
       });
 
+
       console.log('3. ✅ API Response received');
       console.log('   Full response:', response.data);
 
+
       const { access_token, user } = response.data;
+
 
       if (!access_token) {
         throw new Error('No access token in response');
       }
+
 
       console.log('4. 💾 Saving credentials...');
       console.log('   Token length:', access_token.length);
@@ -74,6 +91,7 @@ const Login = () => {
       setAuthToken(access_token);
       setUserData(user);
 
+
       const verifyToken = localStorage.getItem('expense_tracker_token');
       const verifyUser = localStorage.getItem('expense_tracker_user');
       
@@ -81,12 +99,18 @@ const Login = () => {
       console.log('   Token saved:', !!verifyToken);
       console.log('   User saved:', !!verifyUser);
 
+
       if (!verifyToken || !verifyUser) {
         console.error('❌ CRITICAL: localStorage save failed!');
         throw new Error('Failed to save login data');
       }
 
+
+      // Reset states on success
+      setIsServerWaking(false);
+      setRetryCount(0);
       toast.success('Login successful!');
+
 
       console.log('6. 🔄 Redirecting to:', from);
       console.log('   Current URL:', window.location.href);
@@ -94,27 +118,71 @@ const Login = () => {
       // Immediate redirect using navigate
       navigate(from);
 
+
     } catch (error) {
       console.error('❌ === LOGIN ERROR ===');
       console.error('Error type:', error.constructor.name);
       console.error('Error message:', error.message);
       console.error('Error response:', error.response?.data);
 
+
       setLoading(false);
 
+
+      // Check for server wake-up scenarios
+      const isNetworkError = error.message.includes('Network Error') || 
+                             error.code === 'ECONNABORTED' || 
+                             error.code === 'ERR_NETWORK' ||
+                             !error.response;
+
+
+      if (isNetworkError && retryCount < 2) {
+        // Server might be waking up
+        setIsServerWaking(true);
+        setRetryCount(prev => prev + 1);
+        
+        toast.loading(
+          `Server is starting up... This may take up to 30 seconds. Retrying in 10 seconds... (Attempt ${retryCount + 1}/2)`,
+          { 
+            duration: 10000,
+            id: 'server-waking'
+          }
+        );
+
+
+        // Auto-retry after 10 seconds
+        setTimeout(() => {
+          console.log(`🔄 Auto-retry attempt ${retryCount + 1}`);
+          handleSubmit(null, true);
+        }, 10000);
+
+
+        return;
+      }
+
+
+      // Reset server waking state
+      setIsServerWaking(false);
+
+
+      // Handle specific errors
       if (error.response?.status === 401) {
         toast.error('Invalid email or password');
       } else if (error.response?.status === 400) {
         toast.error(error.response?.data?.message || 'Invalid credentials');
       } else if (error.response?.status === 500) {
         toast.error('Server error. Please try again.');
-      } else if (error.message.includes('Network Error')) {
-        toast.error('Cannot connect to server');
+      } else if (isNetworkError) {
+        toast.error(
+          'Cannot connect to server. The server might be starting up. Please wait 30 seconds and try again.',
+          { duration: 6000 }
+        );
       } else {
         toast.error(error.message || 'Login failed');
       }
     }
   };
+
 
   return (
     <div className="w-full max-w-md px-6">
@@ -123,6 +191,44 @@ const Login = () => {
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
           <p className="text-gray-600">Sign in to continue to Expense Tracker</p>
         </div>
+
+
+        {/* Server Waking Up Alert */}
+        {isServerWaking && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center">
+              <svg
+                className="animate-spin h-5 w-5 text-yellow-600 mr-3"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-yellow-800">
+                  Server is starting up...
+                </p>
+                <p className="text-xs text-yellow-700 mt-1">
+                  This may take up to 30 seconds on first use. Automatically retrying...
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -150,6 +256,7 @@ const Login = () => {
               />
             </div>
           </div>
+
 
           <div>
             <label
@@ -189,6 +296,7 @@ const Login = () => {
             </div>
           </div>
 
+
           <div className="flex items-center justify-between">
             <div className="flex items-center">
               <input
@@ -211,6 +319,7 @@ const Login = () => {
               Forgot password?
             </Link>
           </div>
+
 
           <button
             type="submit"
@@ -239,13 +348,14 @@ const Login = () => {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   ></path>
                 </svg>
-                Signing in...
+                {isServerWaking ? 'Server starting up...' : 'Signing in...'}
               </>
             ) : (
               'Sign In'
             )}
           </button>
         </form>
+
 
         <div className="mt-6">
           <div className="relative">
@@ -260,6 +370,7 @@ const Login = () => {
           </div>
         </div>
 
+
         <div className="mt-6 text-center">
           <Link
             to="/register"
@@ -269,6 +380,7 @@ const Login = () => {
           </Link>
         </div>
       </div>
+
 
       <div className="mt-8 text-center">
         <p className="text-sm text-gray-600">
@@ -285,5 +397,6 @@ const Login = () => {
     </div>
   );
 };
+
 
 export default Login;

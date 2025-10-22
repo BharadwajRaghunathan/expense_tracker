@@ -23,6 +23,8 @@ const Register = () => {
   });
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isServerWaking, setIsServerWaking] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
 
   const handleChange = (e) => {
@@ -61,11 +63,12 @@ const Register = () => {
   };
 
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e, isRetry = false) => {
+    if (e) e.preventDefault();
 
 
-    if (!validateForm()) {
+    // Skip validation on retry
+    if (!isRetry && !validateForm()) {
       return;
     }
 
@@ -82,6 +85,11 @@ const Register = () => {
       });
 
 
+      // Reset states on success
+      setIsServerWaking(false);
+      setRetryCount(0);
+
+
       // Backend returns: { message, user }
       toast.success('Registration successful! Please log in.');
       
@@ -90,16 +98,58 @@ const Register = () => {
     } catch (error) {
       console.error('Registration error:', error);
       
-      // Backend returns 409 if user already exists
+      setLoading(false);
+
+
+      // Check for server wake-up scenarios
+      const isNetworkError = error.message?.includes('Network Error') || 
+                             error.code === 'ECONNABORTED' || 
+                             error.code === 'ERR_NETWORK' ||
+                             !error.response;
+
+
+      if (isNetworkError && retryCount < 2) {
+        // Server might be waking up
+        setIsServerWaking(true);
+        setRetryCount(prev => prev + 1);
+        
+        toast.loading(
+          `Server is starting up... This may take up to 30 seconds. Retrying in 10 seconds... (Attempt ${retryCount + 1}/2)`,
+          { 
+            duration: 10000,
+            id: 'server-waking'
+          }
+        );
+
+
+        // Auto-retry after 10 seconds
+        setTimeout(() => {
+          console.log(`🔄 Auto-retry attempt ${retryCount + 1}`);
+          handleSubmit(null, true);
+        }, 10000);
+
+
+        return;
+      }
+
+
+      // Reset server waking state
+      setIsServerWaking(false);
+
+
+      // Handle specific errors
       if (error.response?.status === 409) {
         toast.error('User with this email already exists');
       } else if (error.response?.status === 400) {
         toast.error(error.response?.data?.error || 'Invalid registration data');
+      } else if (isNetworkError) {
+        toast.error(
+          'Cannot connect to server. The server might be starting up. Please wait 30 seconds and try again.',
+          { duration: 6000 }
+        );
       } else {
         toast.error(error.response?.data?.error || 'Registration failed. Please try again.');
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -116,6 +166,43 @@ const Register = () => {
             Join Expense Tracker and manage your finances
           </p>
         </div>
+
+
+        {/* Server Waking Up Alert */}
+        {isServerWaking && (
+          <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex items-center">
+              <svg
+                className="animate-spin h-5 w-5 text-yellow-600 mr-3"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              <div>
+                <p className="text-sm font-medium text-yellow-800">
+                  Server is starting up...
+                </p>
+                <p className="text-xs text-yellow-700 mt-1">
+                  This may take up to 30 seconds on first use. Automatically retrying...
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
 
         {/* Registration Form */}
@@ -224,7 +311,7 @@ const Register = () => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  Creating account...
+                  {isServerWaking ? 'Server starting up...' : 'Creating account...'}
                 </span>
               ) : (
                 'Create Account'
