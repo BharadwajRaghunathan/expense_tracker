@@ -36,14 +36,15 @@ def create_app(config_class=Config):
     # ✅ FIXED: Initialize JWT FIRST with proper config
     jwt.init_app(app)
     
-    # ✅ FIXED: Configure CORS with proper OPTIONS support AND production frontend URL
+    # ✅ FIXED: Configure CORS with proper OPTIONS support AND production frontend URLs (including custom domain)
     CORS(app, 
          resources={
              r"/api/*": {
                  "origins": [
                      "http://localhost:3000", 
                      "http://127.0.0.1:3000",
-                     "https://expense-tracker-frontend-m3ud.onrender.com"
+                     "https://expense-tracker-frontend-m3ud.onrender.com",
+                     "https://expense-tracker.bharadwajr.in"  # Custom domain
                  ],
                  "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
                  "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-TOKEN"],
@@ -91,7 +92,7 @@ def create_app(config_class=Config):
     print('  • /api/ai - AI Insights')
     print('  • /api/export - Export Reports')
     
-    # ✅ FIXED: Add global OPTIONS handler for all API routes with production frontend URL
+    # ✅ FIXED: Add global OPTIONS handler for all API routes (including custom domain)
     @app.before_request
     def handle_preflight():
         from flask import request
@@ -103,7 +104,8 @@ def create_app(config_class=Config):
             allowed_origins = [
                 "http://localhost:3000",
                 "http://127.0.0.1:3000",
-                "https://expense-tracker-frontend-m3ud.onrender.com"
+                "https://expense-tracker-frontend-m3ud.onrender.com",
+                "https://expense-tracker.bharadwajr.in"  # Custom domain
             ]
             if origin in allowed_origins:
                 response.headers.add("Access-Control-Allow-Origin", origin)
