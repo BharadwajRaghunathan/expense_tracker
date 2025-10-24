@@ -23,7 +23,7 @@ services:
       - key: OPENAI_MODEL
         value: gpt-4o-mini
       - key: FRONTEND_URL
-        value: https://your-frontend-url.onrender.com
+        value: https://expense-tracker.bharadwajr.in
 
 databases:
   # PostgreSQL Database
